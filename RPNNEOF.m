@@ -1,5 +1,5 @@
 classdef RPNNEOF
-    % Author: Waddah Waheeb
+    % Author: Waddah Waheeb & Rozaida Ghazali
 
     % For more detail about the model, please refer to the following article: 
     % A Novel Error-Output Recurrent Neural Network Model for Time Series Forecasting
