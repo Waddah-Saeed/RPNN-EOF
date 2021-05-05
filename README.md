@@ -3,7 +3,7 @@ Ridge polynomial neural network with error-output feedbacks
 
 HOW TO RUN: Open call.m and run it!
 
-RPNN-EOF Class contains methods to train and test RPNN-EOF method for 1-step time series forecasting
+RPNN-EOF Class contains methods to train and test RPNN-EOF method for time series forecasting
 
 For more detail about the model, please refer to the following article:
 
