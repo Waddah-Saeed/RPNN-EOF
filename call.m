@@ -16,7 +16,6 @@
     %             ann: in which inputs_train, targets_train, inputs_test &
     %                  targets_test are stored   
 
-    % suppose the univariate time series is called 'data'
     load('data_example.mat');
     disp('Data has been loaded.');
     
