@@ -11,51 +11,28 @@
 
     % Inputs: 
     %            data: univariate time series
-    %       test_size: the size of out-of-sample set
-    %   lower & upper: lower and upper values to scale the time series 
-    %                  using min_max method
-    %            lags: number of past values to be used to forecast 
-    %                  the future values
     
     % Outputs:
-    %              ts: in which variables about the original and scaled time
-    %                  series are stored
     %             ann: in which inputs_train, targets_train, inputs_test &
     %                  targets_test are stored   
 
     % suppose the univariate time series is called 'data'
-    load('example.mat');
+    load('data_example.mat');
     disp('Data has been loaded.');
     
-    test_size = 300;    % the size of out-of-sample set
-    ts = TS.prepare(data, test_size);   % prepare time series based on the given test_size
-    
-    lower=0.2;
-    upper=0.8;
-    scaled=true;
-    
-	ts_scaled = TS.scale(ts,lower,upper);   % scale time series based on the given lower and upper values
-    disp(['Data has been scaled between [', num2str(lower), ',' , num2str(upper), ']']);
-    
-    lags=3;
-    ts_scaled = TS.createlags(ts_scaled,lags);  % construct samples based on the given lags
-    [ann] = TS.split(ts_scaled);    % split the data into training and out-of-sample sets
-    disp(['Data has been splitted and ready for training. The size of out-of-sample set is ', num2str(test_size), ' points.']);
-    
-    
-%% STEP 2: Train RPNN-EF & do 1-step forecasting
+    train_end = 297; % training set size
+    inputs_train = data_inputs(1:train_end,:);
+    targets_train = data_targets(1:train_end,:);
 
-    % You can escape STEP 1 if your training and out-of-sample(i.e., test) sets are ready 
-    % just pass them as follows:
-        % ann.inputs_train = (your training inputs [N*lags]);
-        % ann.targets_train = (your training targets [N*1]);
-        % ann.inputs_test = (your out-of-sample inputs [M*lags]);
-        % ann.targets_test = (your out-of-sample targets [M*1]);
-        % lags = ;
+    inputs_test = data_inputs(train_end+1:end,:);
+    targets_test = data_targets(train_end+1:end,:);
+    disp('Data has been splitted and ready for training.');
     
-    ann.input_nodes = lags + 2;  % 3 lags + 1 error feedback + 1 output feedback
+ %% STEP 2: Train RPNN-EOF
+    rng(1,'twister');
+    ann.input_nodes = size(inputs_train,2) + 2;  % 3 lags + 1 error feedback + 1 output feedback
    
-    % for better forecasting performance you need to try different values at least for these three parameters
+    % for better forecasting performance you need to try different values at least for these four parameters
     ann.lr=0.3;                 %	Learning rate value (try for example [0.01, 0.03, 0.1, 0.3, 1])
     ann.mom=0.9;                 %	Momentum value (try for example [0.9, 0.8, 0.7, ...])
     ann.r=0.0001;               %   Threshold to increase another pi-sigma network of increasing order (try for example [0.00001, 0.0001, 0.001, 0.01, 0.1])
@@ -71,71 +48,70 @@
 
     disp('Start training...');
     
-    [ results_train, net, ann_new ] = RPNNEOF.training( ann );   % train the networks
+    [ results_train, net, ann_new ] = RPNNEOF.fit( ann, inputs_train, targets_train );   % train the networks
     
     disp('Training has been completed.');
     
     % forecasts using mean and median combination
-    results_train.training_forecasts_scaled = RPNNEOF.combine_forecasts(results_train.forecasts_train);
-
-    % forecast 1-step ahead using out-of-sample set
-    results_test = RPNNEOF.forecast( ann, net );
-    
-%% STEP 3: De-scale
-    % if you scaled the data, you need to return it to its original scale,
-    % otherwise, uncomment these and comment
-    if(scaled==true)
-        % return the forecasts to the original scale
-        results_train.training_forecasts = TS.descale(results_train.training_forecasts_scaled, lower, upper, ts.minn, ts.maxx);
-        results_test.forecasts = TS.descale(results_test.combines, lower, upper, ts.minn, ts.maxx);
-        disp('Data has been de-scaled.');
-    else
-        results_train.training_forecasts = results_train.training_forecasts_scaled;
-        results_test.forecasts = results_test;
-    end 
-    
-%% STEP 4: Print & plot the forecasting performance
-
-    % if you didn't use STEP 1, assign your original training and testing
-    % sets to these variables
-    OriginalTrainingSeries = ts.ts_train(lags+1:end,1);
-    OriginalTestingSeries = ts.ts_test;
+    results_train.network_outputs_combined = RPNNEOF.combine_forecasts(results_train.network_outputs);
     
     % check how good is forecasting performance using training set 
-    perf_training = RPNNEOF.performance( results_train.training_forecasts, OriginalTrainingSeries );
- 
-    % check how good is forecasting performance using out-of-sample set     
-    perf_test = RPNNEOF.performance( results_test.forecasts, OriginalTestingSeries );
-
+    perf_training = RPNNEOF.performance( results_train.network_outputs_combined, targets_train );
+    
     disp('************************************');
-    disp('-----------Training error----------');
-    disp(['RMSE (mean): ',num2str(perf_training.RMSE(1,1))]);
-    disp(['RMSE (median): ',num2str(perf_training.RMSE(1,2))]);
+    disp('----------Training error-RMSE----------');
+    disp(['mean: ',num2str(perf_training.RMSE(1,1))]);
+    disp(['median: ',num2str(perf_training.RMSE(1,2))]);
+    disp('----------Training error-MAE----------');
+    disp(['mean: ',num2str(perf_training.MAE(1,1))]);
+    disp(['median: ',num2str(perf_training.MAE(1,2))]);
+    disp('----------Training error-NMSE----------');
+    disp(['mean: ',num2str(perf_training.NMSE(1,1))]);
+    disp(['median: ',num2str(perf_training.NMSE(1,2))]);    
     disp('************************************');
-
-    disp('************************************');
-    disp('--------Out-of-sample error--------');
-    disp(['RMSE (mean): ',num2str(perf_test.RMSE(1,1))]);
-    disp(['RMSE (median): ',num2str(perf_test.RMSE(1,2))]);
-    disp('************************************');
-
+    
     figure(1);
-    xx = 1:1:length(OriginalTestingSeries);
-    plot(xx,ts.ts_test,'-k','LineWidth',1);
+    xx = 1:1:length(targets_train);
+    plot(xx,targets_train,'-k','LineWidth',1);
     hold on;
-    plot(xx,results_test.forecasts(:,1),'-r','LineWidth',1);
+    plot(xx,results_train.network_outputs_combined(:,1),'-r','LineWidth',1);
+    plot(xx,results_train.network_outputs_combined(:,2),'-g','LineWidth',1);
     xlabel('Time');
     ylabel('Time series values');
-    title('Out-of-sample forecasting');
-    legend('Original','Forecasts using mean combination', 1);
+    title('Training forecasting');
+    legend('Original','Fitting using mean combination','Fitting using median combination');
     hold off;
-
+    
+%% Forecast
+       
+    forecast_horizon = 10;
+    results_test = RPNNEOF.forecast( ann, net, inputs_test, targets_test, forecast_horizon );
+    
+    % check how good is forecasting performance using out-of-sample set  
+    points = size(results_test.combines,1);
+    
+    perf_test = RPNNEOF.performance( results_test.combines, targets_test(1:points,1) );
+    
+    disp('************************************');
+    disp('----------Out-of-sample error-RMSE----------');
+    disp(['mean: ',num2str(perf_test.RMSE(1,1))]);
+    disp(['median: ',num2str(perf_test.RMSE(1,2))]);
+    disp('----------Out-of-sample error-MAE----------');
+    disp(['mean: ',num2str(perf_test.MAE(1,1))]);
+    disp(['median: ',num2str(perf_test.MAE(1,2))]);
+    disp('----------Out-of-sample error-NMSE----------');
+    disp(['mean: ',num2str(perf_test.NMSE(1,1))]);
+    disp(['median: ',num2str(perf_test.NMSE(1,2))]);    
+    disp('************************************');
+    
     figure(2);
-    plot(xx,ts.ts_test,'-k','LineWidth',1);
+    xx = 1:1:points;
+    plot(xx,targets_test(1:points,1),'-k','LineWidth',1);
     hold on;
-    plot(xx,results_test.forecasts(:,2),'-r','LineWidth',1);
+    plot(xx,results_test.combines(:,1),'-r','LineWidth',1);
+    plot(xx,results_test.combines(:,2),'-g','LineWidth',1);
     xlabel('Time');
     ylabel('Time series values');
     title('Out-of-sample forecasting');
-    legend('Original','Forecasts using median combination', 1);
+    legend('Original','Forecasts using mean combination','Forecasts using median combination');
     hold off;
